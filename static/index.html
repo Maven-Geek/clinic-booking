@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ìlera Clinic appointments</title>
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #F4F7F6;
+    --surface: #FFFFFF;
+    --ink: #13241F;
+    --muted: #556761;
+    --line: #D5E0DC;
+    --scrub: #2C6B5A;
+    --scrub-deep: #1F5245;
+    --wash: #E1EEE8;
+    --alert: #A8321F;
+    --alert-wash: #F8E6E2;
+
+    --font: "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", system-ui, sans-serif;
+    --step--1: 0.875rem;
+    --step-0: 1.0625rem;
+    --step-1: 1.25rem;
+    --step-2: 1.625rem;
+    --step-3: 2.25rem;
+    --step-4: 3.25rem;
+
+    --radius-s: 6px;
+    --radius-m: 12px;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 400 var(--step-0)/1.5 var(--font);
+    font-variant-numeric: tabular-nums;
+  }
+  button, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--scrub); outline-offset: 2px; }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+
+  /* Header */
+  .masthead { border-bottom: 1px solid var(--line); background: var(--surface); }
+  .masthead .wrap { display: flex; align-items: center; justify-content: space-between; min-height: 64px; gap: 16px; }
+  .wordmark { font-weight: 800; font-size: var(--step-1); letter-spacing: -0.01em; margin: 0; }
+  .wordmark span { font-weight: 400; color: var(--muted); }
+  .masthead .link-button { white-space: nowrap; }
+  .lede .link-button { padding: 0; }
+  .link-button { background: none; border: 0; padding: 8px 0; color: var(--scrub); font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 2px; }
+
+  /* Intro */
+  .intro { padding: 44px 0 28px; max-width: 34em; }
+  .intro h1 { font-size: var(--step-4); line-height: 1.05; letter-spacing: -0.025em; margin: 0 0 12px; font-weight: 800; }
+  .intro p { margin: 0; color: var(--muted); font-size: var(--step-1); line-height: 1.4; }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr); gap: 40px; align-items: start; padding-bottom: 64px; }
+
+  /* Doctor filter */
+  .filter { border: 0; margin: 0 0 24px; padding: 0; }
+  .filter legend { font-weight: 700; margin-bottom: 10px; padding: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { border: 1.5px solid var(--line); background: var(--surface); border-radius: 999px; padding: 7px 16px; cursor: pointer; font-weight: 600; }
+  .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+  .tz { color: var(--muted); font-size: var(--step--1); margin: 0 0 18px; }
+
+  /* Timetable */
+  .day { margin: 0 0 28px; }
+  .day h2 { font-size: var(--step-1); margin: 0 0 6px; font-weight: 700; display: flex; align-items: baseline; gap: 10px; }
+  .day h2 small { font-size: var(--step--1); color: var(--muted); font-weight: 400; }
+  .slots { list-style: none; margin: 0; padding: 0; border-top: 2px solid var(--ink); }
+  .slot { display: grid; grid-template-columns: 6.2em minmax(0, 1fr) auto auto; align-items: center; gap: 16px; padding: 12px 10px 12px 12px; min-height: 66px; border-bottom: 1px solid var(--line); position: relative; }
+  .slot time { font-size: var(--step-2); font-weight: 800; letter-spacing: -0.02em; line-height: 1; white-space: nowrap; }
+  .ampm { font-size: 0.5em; font-weight: 700; letter-spacing: 0; margin-left: 0.25em; }
+  .slot .doc { font-weight: 600; overflow-wrap: anywhere; }
+  .slot .len { color: var(--muted); font-size: var(--step--1); white-space: nowrap; }
+  .slot.is-selected { background: var(--wash); }
+  .slot.is-selected::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--scrub); }
+  .slot.is-off time, .slot.is-off .doc { color: var(--muted); }
+  .slot.is-off time { font-weight: 600; }
+  .slot .state { color: var(--muted); font-size: var(--step--1); min-width: 5.5em; text-align: right; }
+
+  .btn { border: 0; border-radius: var(--radius-s); padding: 10px 18px; font-weight: 700; cursor: pointer; background: var(--scrub); color: #fff; }
+  .btn:hover { background: var(--scrub-deep); }
+  .btn:disabled { opacity: 0.55; cursor: progress; }
+  .btn-quiet { background: var(--surface); color: var(--ink); border: 1.5px solid var(--line); }
+  .btn-quiet:hover { background: var(--wash); }
+  .btn-danger { background: var(--surface); color: var(--alert); border: 1.5px solid currentColor; }
+  .btn-danger:hover { background: var(--alert-wash); }
+  .slot .btn { padding: 8px 16px; min-width: 5.5em; }
+
+  .empty { padding: 28px 0; color: var(--muted); }
+  .empty strong { display: block; color: var(--ink); font-size: var(--step-1); margin-bottom: 4px; }
+
+  /* Side panel */
+  .panel { position: sticky; top: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-m); padding: 24px; }
+  .panel h2 { font-size: var(--step-2); line-height: 1.15; margin: 0 0 6px; letter-spacing: -0.015em; }
+  .panel .lede { margin: 0 0 20px; color: var(--muted); }
+  .panel .lede b { color: var(--ink); }
+
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-weight: 700; margin-bottom: 6px; }
+  .field input { width: 100%; padding: 11px 12px; border: 1.5px solid var(--line); border-radius: var(--radius-s); background: var(--surface); }
+  .field input:focus-visible { outline: none; border-color: var(--scrub); box-shadow: 0 0 0 3px var(--wash); }
+  .field .hint { font-size: var(--step--1); color: var(--muted); margin-top: 4px; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+  .notice { border-radius: var(--radius-s); padding: 12px 14px; margin: 0 0 16px; background: var(--alert-wash); color: var(--alert); font-weight: 600; }
+  .notice[hidden] { display: none; }
+
+  .divider { border: 0; border-top: 1px solid var(--line); margin: 24px 0; }
+
+  /* Appointment card: the one loud element on the page */
+  .card { position: relative; margin: 4px 0 18px; border-radius: var(--radius-m); background: var(--scrub); color: #fff; overflow: hidden; }
+  .card-main { padding: 20px 22px 18px; }
+  .card-status { display: inline-block; font-size: var(--step--1); font-weight: 700; padding: 3px 10px; border-radius: 999px; background: rgba(255,255,255,0.16); margin: 0 0 14px; }
+  .card-time { font-size: var(--step-4); font-weight: 800; line-height: 0.95; letter-spacing: -0.035em; margin: 0; }
+  .card-date { font-size: var(--step-1); margin: 6px 0 18px; font-weight: 600; }
+  .card dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 16px; margin: 0; font-size: var(--step--1); }
+  .card dt { opacity: 0.75; }
+  .card dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+  .card-stub { position: relative; padding: 14px 22px 16px; background: var(--scrub-deep); border-top: 2px dashed rgba(255,255,255,0.35); }
+  .card-stub::before, .card-stub::after { content: ""; position: absolute; top: -11px; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); }
+  .card-stub::before { left: -10px; }
+  .card-stub::after { right: -10px; }
+  .card-stub p { margin: 0 0 4px; font-size: var(--step--1); opacity: 0.8; }
+  .ref { display: flex; align-items: center; gap: 10px; }
+  .ref code { font-family: inherit; font-weight: 700; font-size: var(--step-0); letter-spacing: 0.02em; overflow-wrap: anywhere; flex: 1; }
+  .ref button { background: rgba(255,255,255,0.14); border: 0; color: #fff; border-radius: var(--radius-s); padding: 6px 12px; cursor: pointer; font-weight: 600; font-size: var(--step--1); white-space: nowrap; }
+  .ref button:hover { background: rgba(255,255,255,0.24); }
+
+  .card.is-cancelled { background: #E9ECEB; color: var(--muted); }
+  .card.is-cancelled .card-stub { background: #DDE2E0; border-top-color: #BFC8C5; }
+  .card.is-cancelled .card-status { background: var(--alert-wash); color: var(--alert); }
+  .card.is-cancelled .card-time { text-decoration: line-through; text-decoration-thickness: 4px; }
+  .card.is-cancelled .ref button { background: rgba(0,0,0,0.06); color: var(--ink); }
+
+  .card.is-new { animation: issue 520ms cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes issue {
+    from { transform: translateY(24px) scale(0.98); opacity: 0; clip-path: inset(0 0 100% 0 round 12px); }
+    to   { transform: none; opacity: 1; clip-path: inset(0 0 0 0 round 12px); }
+  }
+  @media (prefers-reduced-motion: reduce) { .card.is-new { animation: none; } }
+
+  /* Find a booking */
+  .mine { list-style: none; margin: 8px 0 0; padding: 0; border-top: 1px solid var(--line); }
+  .mine li { border-bottom: 1px solid var(--line); }
+  .mine button { width: 100%; text-align: left; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; background: none; border: 0; padding: 12px 4px; cursor: pointer; }
+  .mine button:hover { background: var(--wash); }
+  .mine .when { font-weight: 700; }
+  .mine .who { color: var(--muted); font-size: var(--step--1); grid-column: 1; }
+  .mine .st { grid-row: 1 / span 2; grid-column: 2; align-self: center; font-size: var(--step--1); font-weight: 700; color: var(--scrub); }
+  .mine .st.cancelled { color: var(--alert); }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+
+  @media (max-width: 880px) {
+    .layout { grid-template-columns: 1fr; gap: 28px; }
+    .panel { position: static; }
+    .intro { padding: 28px 0 20px; }
+    .intro h1 { font-size: var(--step-3); }
+  }
+  @media (max-width: 480px) {
+    .slot { grid-template-columns: 5em minmax(0, 1fr) auto; gap: 10px; }
+    .wordmark span { display: none; }
+    .slot .len { display: none; }
+    .slot time { font-size: var(--step-1); }
+    .panel { padding: 20px 16px; }
+    .card-time { font-size: var(--step-3); }
+  }
+</style>
+</head>
+<body>
+<header class="masthead">
+  <div class="wrap">
+    <p class="wordmark">Ìlera Clinic <span>appointments</span></p>
+    <button class="link-button" id="open-find" type="button">Find my booking</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="intro">
+    <h1>Book an appointment</h1>
+    <p>Choose a time below. Your booking is confirmed straight away and you get a reference to keep.</p>
+  </section>
+
+  <div class="layout">
+    <section aria-labelledby="times-heading">
+      <h2 id="times-heading" class="sr-only">Available times</h2>
+      <fieldset class="filter" id="filter" hidden>
+        <legend>Doctor</legend>
+        <div class="chips" id="chips"></div>
+      </fieldset>
+      <p class="tz" id="tz"></p>
+      <div id="timetable" aria-live="polite"><p class="empty">Loading times…</p></div>
+    </section>
+
+    <aside class="panel" id="panel" aria-live="polite"></aside>
+  </div>
+</main>
+
+<script>
+const API = "/web/api";   // same-origin bridge; the server adds the API key, so it never reaches the browser
+
+const state = {
+  slots: [],          // every slot (used to describe bookings)
+  shown: [],          // slots for the chosen doctor
+  provider: null,
+  selectedId: null,
+  view: "start",      // start | form | card | find
+  card: null,         // booking shown on the card
+  cardIsNew: false,
+  find: { email: "", bookings: [], cursor: null, searched: false },
+};
+
+const $ = (sel) => document.querySelector(sel);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const timeFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+// "9:30" large with a small "AM", so 12-hour locales stay on one line.
+function timeHTML(date) {
+  const parts = timeFmt.formatToParts(date);
+  const main = parts.filter((p) => p.type !== "dayPeriod").map((p) => p.value).join("").trim();
+  const period = parts.find((p) => p.type === "dayPeriod");
+  return esc(main) + (period ? `<span class="ampm">${esc(period.value)}</span>` : "");
+}
+const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: "long", day: "numeric", month: "long" });
+const longDayFmt = new Intl.DateTimeFormat(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+const dayKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+const minutes = (slot) => Math.round((new Date(slot.end) - new Date(slot.start)) / 60000);
+const hasStarted = (slot) => new Date(slot.start) <= new Date();
+const slotById = (id) => state.slots.find((s) => s.id === id);
+
+function idempotencyKey() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(API + path, {
+    ...options,
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+  });
+  let body = null;
+  try { body = await res.json(); } catch { /* empty body */ }
+  return { status: res.status, body, headers: res.headers };
+}
+
+/* ---------------------------------------------------------- slots */
+
+async function loadSlots() {
+  try {
+    const all = await api("/slots");
+    if (all.status !== 200) throw new Error(all.body?.error || "Could not load times");
+    state.slots = all.body.slots;
+    if (state.provider) {
+      const filtered = await api("/slots?provider=" + encodeURIComponent(state.provider));
+      state.shown = filtered.status === 200 ? filtered.body.slots : [];
+    } else {
+      state.shown = state.slots;
+    }
+  } catch (err) {
+    $("#timetable").innerHTML = `<div class="empty"><strong>The timetable didn't load.</strong>Check your connection and refresh the page.</div>`;
+    return;
+  }
+  renderChips();
+  renderTimetable();
+}
+
+function renderChips() {
+  const doctors = [...new Set(state.slots.map((s) => s.provider))].sort();
+  $("#filter").hidden = doctors.length < 2;
+  const chip = (value, label) =>
+    `<button type="button" class="chip" data-provider="${esc(value ?? "")}" aria-pressed="${state.provider === value}">${esc(label)}</button>`;
+  $("#chips").innerHTML = chip(null, "Any doctor") + doctors.map((d) => chip(d, d)).join("");
+}
+
+function renderTimetable() {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  $("#tz").textContent = `Times are shown in your time zone (${tz.replace(/_/g, " ")}).`;
+
+  const upcoming = state.shown.filter((s) => new Date(s.end) > new Date());
+  if (!upcoming.length) {
+    $("#timetable").innerHTML = `<div class="empty"><strong>No times are open right now.</strong>The clinic hasn't published new appointment times yet. Check back later.</div>`;
+    return;
+  }
+
+  const days = new Map();
+  for (const s of upcoming) {
+    const d = new Date(s.start);
+    const k = dayKey(d);
+    if (!days.has(k)) days.set(k, { date: d, slots: [] });
+    days.get(k).slots.push(s);
+  }
+
+  $("#timetable").innerHTML = [...days.values()].map(({ date, slots }) => {
+    const open = slots.filter((s) => s.available && !hasStarted(s)).length;
+    const rows = slots.map((s) => {
+      const off = !s.available || hasStarted(s);
+      const selected = s.id === state.selectedId;
+      const action = off
+        ? `<span class="state">${s.available ? "Started" : "Booked"}</span>`
+        : `<button type="button" class="btn" data-book="${esc(s.id)}" aria-label="Book ${esc(timeFmt.format(new Date(s.start)))} with ${esc(s.provider)}">Book</button>`;
+      return `<li class="slot${off ? " is-off" : ""}${selected ? " is-selected" : ""}">
+          <time datetime="${esc(s.start)}">${timeHTML(new Date(s.start))}</time>
+          <span class="doc">${esc(s.provider)}</span>
+          <span class="len">${minutes(s)} min</span>
+          ${action}
+        </li>`;
+    }).join("");
+    return `<div class="day">
+        <h2>${dayFmt.format(date)} <small>${open} open</small></h2>
+        <ul class="slots">${rows}</ul>
+      </div>`;
+  }).join("");
+}
+
+/* ---------------------------------------------------------- panel */
+
+function renderPanel() {
+  const panel = $("#panel");
+  if (state.view === "form") return renderForm(panel);
+  if (state.view === "card") return renderCard(panel);
+  if (state.view === "find") return renderFind(panel);
+  panel.innerHTML = `
+    <h2>Your appointment</h2>
+    <p class="lede">Pick a time from the list to start. You'll only need your name and email.</p>
+    <hr class="divider">
+    <p class="lede" style="margin:0">Already booked? <button type="button" class="link-button" data-go="find">Find your booking</button> to see it or cancel it.</p>`;
+}
+
+function renderForm(panel) {
+  const s = slotById(state.selectedId);
+  if (!s) { state.view = "start"; return renderPanel(); }
+  const when = `${timeFmt.format(new Date(s.start))}, ${dayFmt.format(new Date(s.start))}`;
+  panel.innerHTML = `
+    <h2>Book this time</h2>
+    <p class="lede"><b>${esc(when)}</b> with <b>${esc(s.provider)}</b>, ${minutes(s)} minutes.</p>
+    <p class="notice" id="form-error" role="alert" hidden></p>
+    <form id="book-form" novalidate>
+      <div class="field">
+        <label for="name">Full name</label>
+        <input id="name" name="name" autocomplete="name" required>
+      </div>
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" inputmode="email" required>
+        <p class="hint">Use this email to find your booking later.</p>
+      </div>
+      <div class="actions">
+        <button class="btn" id="book-btn" type="submit">Book appointment</button>
+        <button class="btn btn-quiet" type="button" data-go="start">Choose another time</button>
+      </div>
+    </form>`;
+  panel.querySelector("#name").focus({ preventScroll: true });
+}
+
+function renderCard(panel) {
+  const b = state.card;
+  const s = slotById(b.slot_id);
+  const start = s ? new Date(s.start) : null;
+  const cancelled = b.status === "cancelled";
+  panel.innerHTML = `
+    <h2>${cancelled ? "Appointment cancelled" : state.cardIsNew ? "You're booked" : "Your appointment"}</h2>
+    <p class="lede">${cancelled ? "This time is free again for someone else." : "Keep your booking reference. You'll need it to find or cancel this appointment."}</p>
+    <article class="card${cancelled ? " is-cancelled" : ""}${state.cardIsNew ? " is-new" : ""}">
+      <div class="card-main">
+        <p class="card-status">${cancelled ? "Cancelled" : "Confirmed"}</p>
+        <p class="card-time">${start ? timeHTML(start) : "Time unavailable"}</p>
+        <p class="card-date">${start ? longDayFmt.format(start) : esc(b.slot_id)}</p>
+        <dl>
+          <dt>Doctor</dt><dd>${s ? esc(s.provider) : "Not listed"}</dd>
+          <dt>Patient</dt><dd>${esc(b.name)}</dd>
+          <dt>Email</dt><dd>${esc(b.email)}</dd>
+          ${s ? `<dt>Length</dt><dd>${minutes(s)} minutes</dd>` : ""}
+        </dl>
+      </div>
+      <div class="card-stub">
+        <p>Booking reference</p>
+        <div class="ref"><code>${esc(b.id)}</code><button type="button" data-copy="${esc(b.id)}">Copy</button></div>
+      </div>
+    </article>
+    <p class="notice" id="card-error" role="alert" hidden></p>
+    <div class="actions">
+      ${cancelled ? "" : `<button class="btn btn-danger" type="button" id="cancel-btn">Cancel appointment</button>`}
+      <button class="btn btn-quiet" type="button" data-go="start">Book another time</button>
+    </div>`;
+  state.cardIsNew = false;
+}
+
+function renderFind(panel) {
+  const f = state.find;
+  const list = f.bookings.map((b) => {
+    const s = slotById(b.slot_id);
+    const when = s ? `${timeFmt.format(new Date(s.start))}, ${dayFmt.format(new Date(s.start))}` : b.slot_id;
+    return `<li><button type="button" data-open="${esc(b.id)}">
+        <span class="when">${esc(when)}</span>
+        <span class="who">${s ? esc(s.provider) : "Doctor not listed"}</span>
+        <span class="st ${b.status}">${b.status === "cancelled" ? "Cancelled" : "Confirmed"}</span>
+      </button></li>`;
+  }).join("");
+  panel.innerHTML = `
+    <h2>Find my booking</h2>
+    <p class="lede">Look up one booking by its reference, or see every booking made with your email.</p>
+    <p class="notice" id="find-error" role="alert" hidden></p>
+    <form id="ref-form" novalidate>
+      <div class="field">
+        <label for="ref">Booking reference</label>
+        <input id="ref" autocomplete="off" spellcheck="false">
+      </div>
+      <button class="btn" type="submit">Show booking</button>
+    </form>
+    <hr class="divider">
+    <form id="email-form" novalidate>
+      <div class="field">
+        <label for="find-email">Email</label>
+        <input id="find-email" type="email" autocomplete="email" value="${esc(f.email)}">
+      </div>
+      <button class="btn" type="submit">Show my bookings</button>
+    </form>
+    ${f.searched ? (f.bookings.length ? `<ul class="mine">${list}</ul>` : `<p class="lede" style="margin-top:16px">No bookings were made with that email.</p>`) : ""}
+    ${f.cursor ? `<div class="actions" style="margin-top:12px"><button class="btn btn-quiet" type="button" id="more-btn">Show more</button></div>` : ""}
+    <hr class="divider">
+    <button type="button" class="link-button" data-go="start">Back to booking</button>`;
+}
+
+function showError(id, message) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = message;
+  el.hidden = false;
+}
+
+function go(view) {
+  state.view = view;
+  if (view !== "form") state.selectedId = view === "start" ? null : state.selectedId;
+  renderTimetable();
+  renderPanel();
+}
+
+function scrollToPanel() {
+  if (window.matchMedia("(max-width: 880px)").matches) {
+    $("#panel").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  }
+}
+
+/* ---------------------------------------------------------- actions */
+
+async function submitBooking(form) {
+  const btn = form.querySelector("#book-btn");
+  const name = form.name.value.trim();
+  const email = form.email.value.trim();
+  if (!name) return showError("form-error", "Enter your full name.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showError("form-error", "Enter a valid email address, like ada@example.com.");
+
+  btn.disabled = true;
+  btn.textContent = "Booking…";
+  // One key per booking attempt. If the network drops and we retry, the server
+  // recognises the key and returns the original booking instead of making a second one.
+  const key = idempotencyKey();
+  const body = JSON.stringify({ slot_id: state.selectedId, name, email });
+  let res = null;
+  for (let attempt = 0; attempt < 3 && !res; attempt++) {
+    try {
+      res = await api("/bookings", { method: "POST", headers: { "Idempotency-Key": key }, body });
+    } catch {
+      await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+    }
+  }
+  btn.disabled = false;
+  btn.textContent = "Book appointment";
+
+  if (!res) return showError("form-error", "Couldn't reach the clinic. Check your connection and try again.");
+  if (res.status === 201) {
+    state.card = res.body;
+    state.cardIsNew = true;
+    state.view = "card";
+    state.selectedId = null;
+    await loadSlots();
+    renderPanel();
+    scrollToPanel();
+    return;
+  }
+  if (res.status === 409) {
+    await loadSlots();
+    return showError("form-error", "Someone else has just booked this time. Choose another time from the list.");
+  }
+  if (res.status === 404) {
+    await loadSlots();
+    return showError("form-error", "This time is no longer offered. Choose another time from the list.");
+  }
+  if (res.status === 429) {
+    const wait = res.headers.get("Retry-After");
+    return showError("form-error", `Too many booking attempts with this email. Try again in ${wait || "a few"} seconds.`);
+  }
+  showError("form-error", res.body?.error ? capitalise(res.body.error) + "." : "The booking didn't go through. Try again.");
+}
+
+async function cancelBooking() {
+  if (!confirm("Cancel this appointment? The time will be offered to other patients.")) return;
+  const btn = $("#cancel-btn");
+  btn.disabled = true;
+  btn.textContent = "Cancelling…";
+  let res;
+  try { res = await api("/bookings/" + encodeURIComponent(state.card.id), { method: "DELETE" }); }
+  catch { res = null; }
+  if (res && (res.status === 200 || res.status === 409)) {
+    state.card = res.status === 200 ? res.body : { ...state.card, status: "cancelled" };
+    state.find.bookings = state.find.bookings.map((b) => (b.id === state.card.id ? state.card : b));
+    await loadSlots();
+    return renderPanel();
+  }
+  btn.disabled = false;
+  btn.textContent = "Cancel appointment";
+  showError("card-error", res ? "That booking couldn't be found." : "Couldn't reach the clinic. Try again.");
+}
+
+async function findByRef(ref) {
+  ref = ref.trim();
+  if (!ref) return showError("find-error", "Enter your booking reference.");
+  const res = await api("/bookings/" + encodeURIComponent(ref)).catch(() => null);
+  if (!res) return showError("find-error", "Couldn't reach the clinic. Try again.");
+  if (res.status !== 200) return showError("find-error", "No booking has that reference. Check it and try again.");
+  state.card = res.body;
+  state.view = "card";
+  renderPanel();
+}
+
+async function findByEmail(email, more = false) {
+  email = email.trim();
+  if (!email) return showError("find-error", "Enter the email you booked with.");
+  const params = new URLSearchParams({ email, limit: "5" });
+  if (more && state.find.cursor) params.set("cursor", state.find.cursor);
+  const res = await api("/bookings?" + params).catch(() => null);
+  if (!res || res.status !== 200) return showError("find-error", res ? capitalise(res.body?.error || "search failed") + "." : "Couldn't reach the clinic. Try again.");
+  state.find = {
+    email,
+    bookings: more ? state.find.bookings.concat(res.body.bookings) : res.body.bookings,
+    cursor: res.body.next_cursor,
+    searched: true,
+  };
+  renderPanel();
+}
+
+const capitalise = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/* ---------------------------------------------------------- events */
+
+document.addEventListener("click", async (e) => {
+  const t = e.target.closest("button");
+  if (!t) return;
+  if (t.dataset.book) {
+    state.selectedId = t.dataset.book;
+    state.view = "form";
+    renderTimetable();
+    renderPanel();
+    scrollToPanel();
+  } else if (t.dataset.provider !== undefined && t.classList.contains("chip")) {
+    state.provider = t.dataset.provider || null;
+    await loadSlots();
+  } else if (t.dataset.go) {
+    go(t.dataset.go);
+    if (t.dataset.go === "find") scrollToPanel();
+  } else if (t.id === "open-find") {
+    go("find");
+    scrollToPanel();
+  } else if (t.id === "cancel-btn") {
+    cancelBooking();
+  } else if (t.id === "more-btn") {
+    findByEmail(state.find.email, true);
+  } else if (t.dataset.open) {
+    state.card = state.find.bookings.find((b) => b.id === t.dataset.open);
+    state.view = "card";
+    renderPanel();
+  } else if (t.dataset.copy) {
+    try { await navigator.clipboard.writeText(t.dataset.copy); t.textContent = "Copied"; }
+    catch { t.textContent = "Select and copy"; }
+    setTimeout(() => { t.textContent = "Copy"; }, 1600);
+  }
+});
+
+document.addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (e.target.id === "book-form") submitBooking(e.target);
+  if (e.target.id === "ref-form") findByRef(e.target.querySelector("#ref").value);
+  if (e.target.id === "email-form") findByEmail(e.target.querySelector("#find-email").value);
+});
+
+renderPanel();
+loadSlots();
+</script>
+</body>
+</html>
