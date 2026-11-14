@@ -1,49 +1,139 @@
-# Clinic booking API
+# Clinic Booking API
 
-Koya Cohort 4 assessment, Task 1. A FastAPI + Postgres API that lets patients book appointment slots, and a web page that uses it. All five levels are implemented.
+A REST API that lets patients book clinic appointment slots, with a patient-facing web page built on top of it. Patients can browse open times, book one, get a confirmation with a booking reference, look their booking up later, and cancel it.
 
-| | |
+**Live:** [clinic-booking-1d33.onrender.com](https://clinic-booking-1d33.onrender.com) (the web page is at `/`, and the API shares the same base URL)
+
+Built with **FastAPI** and **PostgreSQL** for Task 1 of the Koya Academy Cohort 4 assessment. All five levels of the specification are implemented.
+
+## Features
+
+| Level | Capability | How it's achieved |
+|---|---|---|
+| 1 | List slots, book one, look up a booking | Six JSON endpoints backed by Postgres, so bookings persist across requests and restarts |
+| 2 | API key and input validation | Middleware rejects requests without a valid `X-API-Key`; bookings with missing or invalid details get `400`, unknown slots `404` |
+| 3 | No double booking, even under concurrency; cancellation | A partial unique index lets the database itself guarantee one confirmed booking per slot |
+| 4 | Safe retries and pagination | `Idempotency-Key` support backed by a transactional claim, and keyset (cursor) pagination |
+| 5 | Spam protection | A sliding-window rate limit of 5 booking attempts per email per minute, with `Retry-After` |
+
+**The web page** shows the timetable grouped by day with a doctor filter, books a slot, and displays an appointment card with the booking reference. Patients can find a booking by reference or list all bookings for their email, and cancel. Errors become plain guidance, for example "Someone else has just booked this time" for a `409`, or how many seconds to wait for a `429`.
+
+## Tech stack
+
+| Layer | Choice |
 |---|---|
-| API base URL | `https://YOUR-SERVICE.onrender.com` |
-| Web page | `https://YOUR-SERVICE.onrender.com/` |
-| Stack | Python 3.12, FastAPI, asyncpg, Postgres (Neon), hosted on Render |
+| Language | Python 3.12+ |
+| Web framework | FastAPI on Uvicorn |
+| Database | PostgreSQL (hosted on Neon) |
+| Database driver | asyncpg, with raw SQL |
+| Front end | One HTML page with vanilla JavaScript and CSS, served by the API |
+| Hosting | Render web service |
 
-## How each level works
+## API
 
-**Level 1: slots and bookings** (`app/main.py`)
-`POST /reset` truncates everything and inserts the new slots in one transaction. Slot `start` and `end` are stored twice: the original string (returned exactly as sent) and a parsed `timestamptz` (used for sorting and the "already started" check). `available` means the slot has no confirmed booking.
+Every endpoint requires the `X-API-Key` header. Every error has the same shape: `{"error": "<message>"}`.
 
-**Level 2: API key and validation** (`app/security.py`, `app/bookings.py`)
-A middleware rejects any request without the right `X-API-Key` (compared in constant time) before routing, so every endpoint returns `401` consistently. Bookings are validated in order: missing or blank fields, email format, slot exists (`404`), slot not started (`400`). `name` and `email` are trimmed and the email is lower-cased before saving.
+| Method and path | Purpose | Success | Errors |
+|---|---|---|---|
+| `POST /reset` | Delete all bookings and replace all slots | `200` | `400` invalid slot data |
+| `GET /slots?provider=` | All slots, earliest first, with `available` | `200` | |
+| `POST /bookings` | Book a slot (optional `Idempotency-Key` header) | `201` | `400`, `404`, `409`, `422`, `429` |
+| `GET /bookings?email=&limit=&cursor=` | One person's bookings, oldest first, paginated | `200` | `400` invalid `limit` or cursor |
+| `GET /bookings/{id}` | One booking | `200` | `404` |
+| `DELETE /bookings/{id}` | Cancel a booking and free its slot | `200` | `404`, `409` already cancelled |
 
-**Level 3: no double booking** (`app/schema.sql`)
-The guarantee lives in the database, not in application code:
+Example:
 
-```sql
-CREATE UNIQUE INDEX one_confirmed_booking_per_slot ON bookings (slot_id) WHERE status = 'confirmed';
+```http
+POST /bookings
+X-API-Key: <key>
+Idempotency-Key: 6f1c0b9e-2d4a-4b7e-9a51-0c3f2e8d7a10
+Content-Type: application/json
+
+{"slot_id": "s1", "name": "Ada Obi", "email": "ada@example.com"}
 ```
 
-When many requests race for one slot, Postgres lets exactly one insert succeed; the rest raise a unique violation, which becomes `409`. A check-then-insert in Python would have a race window; this doesn't. Cancelled bookings fall outside the index, so cancelling frees the slot. Cancel is a single conditional `UPDATE ... WHERE status = 'confirmed'`, so simultaneous cancels give one `200` and the rest `409`.
+```json
+{
+  "id": "b5f0c2d8-6c1e-4a8f-9a0b-3e2d1c4b5a69",
+  "slot_id": "s1",
+  "name": "Ada Obi",
+  "email": "ada@example.com",
+  "status": "confirmed",
+  "created_at": "2026-11-14T09:15:02.481Z"
+}
+```
 
-**Level 4: idempotency and pagination** (`app/bookings.py`, `app/main.py`)
-Each `Idempotency-Key` gets a row holding a SHA-256 fingerprint of the request body (canonical JSON, so key order doesn't matter) and the response that was sent. The key is claimed with `INSERT ... ON CONFLICT DO NOTHING` inside the same transaction as the booking. A duplicate request arriving at the same moment blocks on that row until the first commits, then replays the saved response: same status, same booking id, never a second booking. A different body with the same key gets `422`.
-`GET /bookings` uses keyset pagination on an insertion-order column. It fetches `limit + 1` rows to know if another page exists, so the last page always has `next_cursor: null`, even when it's exactly full.
+## Design decisions
 
-**Level 5: rate limiting** (`app/bookings.py`)
-A sliding one-minute window per email, stored in Postgres so it holds across restarts and multiple instances. A per-email advisory lock makes the count-and-record step atomic, so 10 simultaneous attempts give exactly 5 through and 5 `429`s. Failed attempts count. `Retry-After` is the whole seconds until the oldest counted attempt leaves the window.
+### Double booking is prevented by the database
 
-How levels 4 and 5 interact:
-- A replay of an already-answered key returns the saved response and isn't counted, since it isn't a new attempt.
-- Simultaneous copies of one keyed request count once.
-- A `429` is never saved as a key's response, so the same request can succeed after the window frees up.
+Checking whether a slot is free and then inserting leaves a race window: two simultaneous requests can both see the slot as free. Instead, the rule lives in the schema:
 
-## The web page
+```sql
+CREATE UNIQUE INDEX one_confirmed_booking_per_slot
+    ON bookings (slot_id) WHERE status = 'confirmed';
+```
 
-`static/index.html`, served at `/`. Patients pick a time, enter their name and email, and get an appointment card with their booking reference. They can look a booking up by reference or list every booking for their email (with "Show more" pagination), and cancel.
+When many requests race for one slot, Postgres lets exactly one insert succeed and rejects the rest with a unique violation, which the API returns as `409`. Cancelled bookings fall outside the index, so cancelling frees the slot. Cancellation itself is a single conditional `UPDATE ... WHERE status = 'confirmed'`, so simultaneous cancels produce one `200` and the rest `409`.
 
-The page never sees the API key. It calls `/web/api/...` on the same server, and the middleware maps those calls to the real endpoints as trusted requests. Only the endpoints a patient needs are mapped; `/reset` is not reachable that way. Each booking attempt sends a fresh `Idempotency-Key`, and network retries reuse it, so a flaky connection can't create a duplicate.
+### Retries never create duplicates
 
-## Run locally
+Each `Idempotency-Key` is stored with a SHA-256 fingerprint of the request body (canonical JSON, so key order and whitespace don't matter) and the exact response that was sent. The key is claimed with `INSERT ... ON CONFLICT DO NOTHING` inside the same transaction as the booking, so a duplicate arriving at the same instant waits for the first to commit and then replays its response: same status, same booking `id`. Reusing a key with a different body returns `422`. The web page generates one key per booking attempt and reuses it when it retries after a network failure.
+
+### Rate limiting that holds under bursts
+
+Attempts are recorded per email in Postgres, so the limit survives restarts and would hold across multiple instances. A per-email advisory lock makes counting atomic, so a burst of 10 simultaneous attempts lets exactly 5 through. Failed attempts count, replays of an already-answered request don't, and a `429` is never stored as a key's response, so the same request can succeed once the window frees up. `Retry-After` is the whole number of seconds until the oldest counted attempt leaves the window.
+
+### Order of checks for a booking
+
+```mermaid
+flowchart TD
+    A[POST /bookings] --> B{Idempotency-Key already answered?}
+    B -->|yes| R[Replay saved response, or 422 if the body differs]
+    B -->|no, or no key| C{5 attempts from this email in the last 60 s?}
+    C -->|yes| L[429 with Retry-After]
+    C -->|no| D{Fields present and email valid?}
+    D -->|no| E1[400]
+    D -->|yes| F{Slot exists and hasn't started?}
+    F -->|no| E2[404 or 400]
+    F -->|yes| G{Insert allowed by the unique index?}
+    G -->|no| E3[409]
+    G -->|yes| OK[201 Created]
+```
+
+The rate limit comes before validation so that failed attempts are counted, as the specification requires.
+
+### Keyset pagination
+
+Bookings carry an insertion-order sequence number, and a cursor encodes "after sequence N". Unlike offset paging, results don't shift when new bookings arrive between page loads. The query fetches `limit + 1` rows to know whether another page exists, so the last page always returns `next_cursor: null`, even when it is exactly full.
+
+### The web page never holds the API key
+
+Code in a web page is visible to every visitor, so the page can't carry the key. It calls `/web/api/...` paths instead, which the server maps to the real endpoints for just the five operations a patient needs. They run the same code, so validation, double-booking protection, idempotency and rate limiting all still apply, and `/reset` is unreachable from the page.
+
+## Project structure
+
+```text
+app/
+  main.py        app setup, error handlers, and every endpoint
+  security.py    API key middleware and the web page's restricted paths
+  bookings.py    booking creation: validation, rate limit, idempotency, insert
+  schema.sql     tables and indexes, applied on startup
+  db.py          connection pool
+  config.py      settings from environment variables
+  errors.py      the {"error": ...} exception type
+  timeutil.py    timestamp parsing and formatting
+static/
+  index.html     the patient web page
+scripts/
+  check_levels.py  end-to-end checks for all five levels
+render.yaml      service definition for Render
+```
+
+## Running locally
+
+Requires Python 3.12 or newer and a PostgreSQL database.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -53,31 +143,35 @@ export API_KEY=change-me
 uvicorn app.main:app --reload
 ```
 
-Tables are created on startup.
+The tables are created on startup. Open `http://localhost:8000` for the web page.
 
-## Test every level
+| Variable | Purpose | Default |
+|---|---|---|
+| `DATABASE_URL` | PostgreSQL connection string | required |
+| `API_KEY` | Key clients send in `X-API-Key` | required |
+| `RATE_LIMIT_MAX` | Booking attempts allowed per email per window | `5` |
+| `RATE_LIMIT_WINDOW` | Window length in seconds | `60` |
+| `DB_POOL_MAX` | Maximum database connections | `10` |
 
-`scripts/check_levels.py` runs 72 checks across all five levels, including the race conditions (40 simultaneous bookings for one slot, 30 simultaneous retries with one key, a burst of 10 attempts from one email).
+## Testing
+
+`scripts/check_levels.py` runs 72 end-to-end checks against a running instance, covering every level, including the concurrency cases: 40 simultaneous bookings for one slot (exactly one succeeds), 30 simultaneous retries with one idempotency key (one booking), 10 simultaneous cancels, and a burst of 10 attempts from one email (exactly 5 limited).
 
 ```bash
 pip install httpx
 python scripts/check_levels.py --base http://localhost:8000 --key change-me
 ```
 
-It calls `/reset`, which wipes all bookings, so only run it against the live deployment before submitting.
+The script calls `/reset`, which deletes all bookings, so point it at a test instance.
 
-## Deploy (free: Neon + Render)
+## Deployment
 
-1. **Database.** Create a project at [neon.tech](https://neon.tech). Copy the connection string from the dashboard (the one starting `postgresql://`).
-2. **Key.** Generate an API key: `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
-3. **Repo.** Push this folder to GitHub.
-4. **Web service.** On [render.com](https://render.com), choose New, then Blueprint, and select the repo. Render reads `render.yaml` and asks for `DATABASE_URL` and `API_KEY`. (Or create a Web Service by hand with build command `pip install -r requirements.txt` and start command `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.)
-5. **Keep it awake.** Render's free plan sleeps after 15 idle minutes and takes up to a minute to wake, which could time out the graders' checks. Point a free uptime monitor (UptimeRobot or cron-job.org) at `https://YOUR-SERVICE.onrender.com/health` every 10 minutes. `/health` doesn't touch the database, so Neon can still sleep between real requests.
-6. **Verify.** Run the check script against the live URL, then load the web page once.
+Runs as a Python web service on Render, connected to a Neon PostgreSQL database. Secrets are supplied as environment variables and never committed. A database-free `/health` endpoint supports uptime monitoring without waking the database.
 
-## Assumptions
+## Known limitations and next steps
 
-- `available` on a slot means "has no confirmed booking". Past slots are listed (as `/reset` allows them) but booking one returns `400`; the web page shows them as started.
-- `/reset` also clears idempotency keys and rate-limit counters, since they describe bookings that no longer exist.
-- Bookings for an email include cancelled ones.
-- Timestamps in responses (`created_at`) are UTC ISO 8601 with milliseconds and a `Z` suffix, matching the spec's example.
+- **Patient identity isn't verified.** The page lists bookings by email without proving the visitor owns that email. A production system would add sign-in or an emailed link.
+- **Idempotency records are kept indefinitely.** A scheduled cleanup would expire them after about 24 hours.
+- **Schema changes run at startup.** A migration tool such as Alembic would suit a growing schema.
+- **The checks are a script rather than a CI suite.** Porting them to pytest and running them on every push would catch regressions automatically.
+- **Free hosting sleeps when idle**, so the first request after a quiet period can be slow.
